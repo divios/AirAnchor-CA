@@ -1,11 +1,12 @@
 package io.github.divios.jairanchorca.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.airanchordtos.CertificateResponse;
+import io.github.airanchordtos.CertificationRequest;
 import io.github.divios.jairanchorca.exceptions.InvalidRequestException;
-import io.github.divios.jairanchorca.models.CertificateResponse;
-import io.github.divios.jairanchorca.models.CertificationRequest;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -21,11 +22,9 @@ public class Receiver {
     private ObjectMapper objectMapper;
 
     @SneakyThrows
-    @RabbitListener(queues = "ca_queue")
-    public byte[] receiveMessage(CertificationRequest request) {
-        var response = generateResponse(request);
-
-        return objectMapper.writeValueAsBytes(response);
+    @RabbitListener(queues = "ca_queue", messageConverter = "jackson2Converter", returnExceptions = "true")
+    public CertificateResponse receiveMessage(CertificationRequest request) {
+        return generateResponse(request);
     }
 
     private CertificateResponse generateResponse(CertificationRequest request) {
@@ -34,7 +33,7 @@ public class Receiver {
 
         } catch (InvalidRequestException e) {
             log.error(e.getMessage());
-            return null;
+            throw new AmqpRejectAndDontRequeueException(e);
 
         } catch (Exception e) {
             log.error("There was an error trying to generate the response: " + e);

@@ -1,12 +1,12 @@
 package io.github.divios.jairanchorca.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.airanchordtos.CertificateResponse;
+import io.github.airanchordtos.CertificationRequest;
 import io.github.divios.jairanchorca.exceptions.InvalidRequestException;
-import io.github.divios.jairanchorca.models.CertificateResponse;
-import io.github.divios.jairanchorca.models.CertificationRequest;
+import jakarta.annotation.PostConstruct;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import sawtooth.sdk.signing.Context;
@@ -23,14 +23,24 @@ public class MessageProcessorService {
     private KeyWrapperService keyWrapperService;
 
     @Autowired
+    private AuthorizedNodesService authorizedNodesService;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     @SneakyThrows
     public CertificateResponse processRequest(CertificationRequest request) {
+        log.info("Received to process: {}", request);
+
+        if (!authorizedNodesService.isAuthorized(request.getHeader().getSender_public_key()))
+            throw new InvalidRequestException("Sender is not authorized");
+
         validateRequest(request);
 
         var toFirm = objectMapper.writeValueAsBytes(request);
         var caSignature = keyWrapperService.firm(toFirm);
+
+        log.info("Resolved as valid");
 
         return CertificateResponse.builder()
                 .ca_pub_key(keyWrapperService.getPubKey())
@@ -59,8 +69,8 @@ public class MessageProcessorService {
     }
 
     private void verifySignature(CertificationRequest request,
-                                    String senderRequestSignature,
-                                    Secp256k1PublicKey senderPubKey
+                                 String senderRequestSignature,
+                                 Secp256k1PublicKey senderPubKey
     ) {
         try {
             boolean result = context.verify(senderRequestSignature,                       // validate signature

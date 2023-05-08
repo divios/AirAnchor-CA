@@ -49,7 +49,7 @@ public class KeyWrapperService {
         return context.sign(data, secp256k1PrivateKey);
     }
 
-    @Cacheable
+    @Cacheable("ca_pub_key")
     public String getPubKey() {
         return context.getPublicKey(secp256k1PrivateKey).hex();
     }
